@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import styled from '@emotion/styled'
 import { ReactComponent as DayCloudyIcon } from './images/day-cloudy.svg';
 import { ReactComponent as RainIcon } from './images/rain.svg';
@@ -6,7 +6,7 @@ import { ReactComponent as AirFlowIcon } from './images/airFlow.svg'
 import { ReactComponent as RefreshIcon } from './images/refresh.svg'
 
 import { ThemeProvider } from '@emotion/react'
-
+import dayjs from 'dayjs'
 
 
 const Container = styled.div`
@@ -120,7 +120,8 @@ const theme = {
     textColor: '#cccccc',
   },
 };
-
+const AUTHORIZATION_KEY = 'CWB-1C47322D-578A-4E28-8809-8436255ACD97'
+const LOCATION_NAME = '臺北'
 function App() {
   const [currentTheme, setCurrentTheme] = useState('light')
   const [currentWeather, setCurrentWeather] = useState({
@@ -129,8 +130,45 @@ function App() {
     windSpeed: 1.1,
     temperature: 22.9,
     rainPossibility: 48.3,
-    observationTime: '2020-12-12 22:10:00'
+    observationTime: '2020-12-12 22:10:00',
+    isLoading: true
   })
+  useEffect(() => {
+    fetchCurrentWeather()
+  }, [])
+  const fetchCurrentWeather = () => {
+    //為了呈現加載畫面，在按下刷新按鈕拉取資料前，先用setSomething把isLoading改成true
+    setCurrentWeather((prevState) => ({
+      ...prevState,
+      isLoading: true
+    }))
+    fetch(`https://opendata.cwb.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${AUTHORIZATION_KEY}&locationName=${LOCATION_NAME}`)
+      .then((response) => response.json())
+      .then((data) => {
+        const locationData = data.records.location[0]
+        const weatherElements = locationData.weatherElement.reduce((neededElements, item) => {
+          // 第一個參數是最後被整理完成的新物件，因為initialValue設定為{}，所以這裡的第一個參數代表物件
+          // 第二個參數是現在比對中的參數
+          if (['WDSD', 'TEMP'].includes(item.elementName)) {
+            // 如果符合條件，就塞進neededElement這個物件
+            // 用對應的WDSD和TEMP當作KEY，對應的value當作值塞入物件(下方這句)
+            neededElements[item.elementName] = item.elementValue
+          }
+          return neededElements
+        }, {}
+        )
+        //把整理好的物件資料帶入setSomthing裡面
+        setCurrentWeather({
+          locationName: locationData.locationName,
+          description: '晴時多雲',
+          windSpeed: weatherElements.WDSD,
+          temperature: weatherElements.TEMP,
+          rainPossibility: 48.3,
+          observationTime: locationData.time.obsTime,
+          isLoading: false
+        })
+      })
+  }
   return (
     <ThemeProvider theme={theme[currentTheme]}>
       <Container>
@@ -153,9 +191,9 @@ function App() {
             最後觀測時間：{new Intl.DateTimeFormat('zh-tw', {
             hour: 'numeric',
             minute: 'numeric',
-          }).format(new Date(currentWeather.observationTime))}
+          }).format(dayjs(currentWeather.observationTime))}
             {' '}
-            <RefreshIcon />
+            <RefreshIcon onClick={fetchCurrentWeather} />
           </Refresh>
         </WeatherCard>
       </Container>
