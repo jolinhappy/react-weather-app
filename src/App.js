@@ -135,6 +135,59 @@ const theme = {
 const AUTHORIZATION_KEY = 'CWB-1C47322D-578A-4E28-8809-8436255ACD97'
 const LOCATION_NAME = '臺北'
 const LOCATION_NAME_FORECAST = '臺北市'
+const fetchCurrentWeather = () => {
+  //為了呈現加載畫面，在按下刷新按鈕拉取資料前，先用setSomething把isLoading改成true
+  // setWeatherElement((prevState) => ({
+  //   ...prevState,
+  //   isLoading: true
+  // }))
+  return fetch(`https://opendata.cwb.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${AUTHORIZATION_KEY}&locationName=${LOCATION_NAME}`)
+    .then((response) => response.json())
+    .then((data) => {
+      const locationData = data.records.location[0]
+      const weatherElements = locationData.weatherElement.reduce((neededElements, item) => {
+        // 第一個參數是最後被整理完成的新物件，因為initialValue設定為{}，所以這裡的第一個參數代表物件
+        // 第二個參數是現在比對中的參數(遍歷)
+        if (['WDSD', 'TEMP'].includes(item.elementName)) {
+          // 如果符合條件，就塞進neededElement這個物件
+          // 用對應的WDSD和TEMP當作KEY，對應的value當作值塞入物件(下方這句)
+          neededElements[item.elementName] = item.elementValue
+        }
+        return neededElements
+      }, {}
+      )
+      //把整理好的物件資料帶入setSomthing裡面
+      return {
+        locationName: locationData.locationName,
+        windSpeed: weatherElements.WDSD,
+        temperature: weatherElements.TEMP,
+        observationTime: locationData.time.obsTime,
+        isLoading: false
+      }
+    })
+}
+const fetchWeatherForecast = () => {
+  return fetch(`https://opendata.cwb.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${AUTHORIZATION_KEY}&locationName=${LOCATION_NAME_FORECAST}`)
+    .then((response) => response.json())
+    .then((data) => {
+      const locationData = data.records.location[0]
+      const weatherElements = locationData.weatherElement.reduce((neededElements, item) => {
+        if (['Wx', "PoP", 'CI'].includes(item.elementName)) {
+          //取得最近一個12小時的資料，所以取得time的第一筆資料
+          neededElements[item.elementName] = item.time[0].parameter
+        }
+        return neededElements
+      }, {})
+      return {
+        description: weatherElements.Wx.parameterName,
+        weatherCode: weatherElements.Wx.parameterValue,
+        rainPossibility: weatherElements.PoP.parameterName,
+        comfortability: weatherElements.CI.parameterName,
+      }
+    })
+}
+
+
 function App() {
   const [currentTheme, setCurrentTheme] = useState('light')
   const [weatherElement, setWeatherElement] = useState({
@@ -150,63 +203,26 @@ function App() {
   })
   const { locationName, description, windSpeed, temperature, rainPossibility, observationTime, isLoading } = weatherElement
   useEffect(() => {
-    fetchCurrentWeather()
-    fetchWeatherForecast()
+    const fetchData = async () => {
+      setWeatherElement((prevState) => ({
+        ...prevState,
+        isLoading: true
+      }))
+      const [currentWeather, weatherForecast] = await Promise.all([
+        fetchCurrentWeather(),
+        fetchWeatherForecast(),
+      ]);
+      console.log(currentWeather)
+      console.log(weatherForecast)
+      setWeatherElement({
+        ...currentWeather,
+        ...weatherForecast,
+        isLoading: false
+      })
+    }
+    fetchData()
   }, [])
-  const fetchCurrentWeather = () => {
-    //為了呈現加載畫面，在按下刷新按鈕拉取資料前，先用setSomething把isLoading改成true
-    setWeatherElement((prevState) => ({
-      ...prevState,
-      isLoading: true
-    }))
-    fetch(`https://opendata.cwb.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${AUTHORIZATION_KEY}&locationName=${LOCATION_NAME}`)
-      .then((response) => response.json())
-      .then((data) => {
-        const locationData = data.records.location[0]
-        const weatherElements = locationData.weatherElement.reduce((neededElements, item) => {
-          // 第一個參數是最後被整理完成的新物件，因為initialValue設定為{}，所以這裡的第一個參數代表物件
-          // 第二個參數是現在比對中的參數(遍歷)
-          if (['WDSD', 'TEMP'].includes(item.elementName)) {
-            // 如果符合條件，就塞進neededElement這個物件
-            // 用對應的WDSD和TEMP當作KEY，對應的value當作值塞入物件(下方這句)
-            neededElements[item.elementName] = item.elementValue
-          }
-          return neededElements
-        }, {}
-        )
-        //把整理好的物件資料帶入setSomthing裡面
-        setWeatherElement((prevState) => ({
-          ...prevState,
-          locationName: locationData.locationName,
-          windSpeed: weatherElements.WDSD,
-          temperature: weatherElements.TEMP,
-          observationTime: locationData.time.obsTime,
-          isLoading: false
-        }))
-      })
-  }
-  const fetchWeatherForecast = () => {
-    fetch(`https://opendata.cwb.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${AUTHORIZATION_KEY}&locationName=${LOCATION_NAME_FORECAST}`)
-      .then((response) => response.json())
-      .then((data) => {
-        const locationData = data.records.location[0]
-        const weatherElements = locationData.weatherElement.reduce((neededElements, item) => {
-          if (['Wx', "PoP", 'CI'].includes(item.elementName)) {
-            //取得最近一個12小時的資料，所以取得time的第一筆資料
-            neededElements[item.elementName] = item.time[0].parameter
-          }
-          return neededElements
-        }, {})
-        setWeatherElement(
-          (prevState) => ({
-            ...prevState,
-            description: weatherElements.Wx.parameterName,
-            weatherCode: weatherElements.Wx.parameterValue,
-            rainPossibility: weatherElements.PoP.parameterName,
-            comfortability: weatherElements.CI.parameterName,
-          }))
-      })
-  }
+
   return (
     <ThemeProvider theme={theme[currentTheme]}>
       <Container>
